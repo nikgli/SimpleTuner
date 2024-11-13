@@ -6,6 +6,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 import random
 import time
+import json
 import logging
 import sys
 import torch
@@ -146,6 +147,15 @@ def get_argument_parser():
         help=(
             "An experimental feature to train Flux.1S using a noise schedule closer to what it was trained with,"
             " which has improved results in short experiments. Thanks to @mhirki for the contribution."
+        ),
+    )
+    parser.add_argument(
+        "--flux_use_uniform_schedule",
+        action="store_true",
+        help=(
+            "Whether or not to use a uniform schedule with Flux instead of sigmoid."
+            " Using uniform sampling may help preserve more capabilities from the base model."
+            " Some tasks may not benefit from this."
         ),
     )
     parser.add_argument(
@@ -580,6 +590,15 @@ def get_argument_parser():
         help=(
             "When pre-caching latent vectors, this is the batch size to use. Decreasing this may help with VRAM issues,"
             " but if you are at that point of contention, it's possible that your GPU has too little RAM. Default: 4."
+        ),
+    )
+    parser.add_argument(
+        "--vae_enable_tiling",
+        action="store_true",
+        default=False,
+        help=(
+            "If set, will enable tiling for VAE caching. This is useful for very large images when VRAM is limited."
+            " This may be required for 2048px VAE caching on 24G accelerators, in addition to reducing --vae_batch_size."
         ),
     )
     parser.add_argument(
@@ -1350,6 +1369,37 @@ def get_argument_parser():
             " the default mode, provides the most benefit."
         ),
     )
+    parser.add_argument(
+        "--validation_guidance_skip_layers",
+        type=str,
+        default=None,
+        help=(
+            "StabilityAI recommends a value of [7, 8, 9] for Stable Diffusion 3.5 Medium."
+        ),
+    )
+    parser.add_argument(
+        "--validation_guidance_skip_layers_start",
+        type=float,
+        default=0.01,
+        help=("StabilityAI recommends a value of 0.01 for SLG start."),
+    )
+    parser.add_argument(
+        "--validation_guidance_skip_layers_stop",
+        type=float,
+        default=0.01,
+        help=("StabilityAI recommends a value of 0.2 for SLG start."),
+    )
+    parser.add_argument(
+        "--validation_guidance_skip_scale",
+        type=float,
+        default=2.8,
+        help=(
+            "StabilityAI recommends a value of 2.8 for SLG guidance skip scaling."
+            " When adding more layers, you must increase the scale, eg. adding one more layer requires doubling"
+            " the value given."
+        ),
+    )
+
     parser.add_argument(
         "--allow_tf32",
         action="store_true",
@@ -2390,5 +2440,16 @@ def parse_cmdline_args(input_args=None):
         raise ValueError(
             f"Invalid gradient_accumulation_steps parameter: {args.gradient_accumulation_steps}, should be >= 1"
         )
+
+    if args.validation_guidance_skip_layers is not None:
+        try:
+            import json
+
+            args.validation_guidance_skip_layers = json.loads(
+                args.validation_guidance_skip_layers
+            )
+        except Exception as e:
+            logger.error(f"Could not load skip layers: {e}")
+            raise
 
     return args
